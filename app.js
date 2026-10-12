@@ -35,8 +35,8 @@
   // Security levels are named by what they mean for the team.
   const SECURITY = ["Safe to visit", "Visit with caution", "Not safe to visit"];
   const ACCESS = [
-    { value: "Roads", desc: "By car or motorbike" },
-    { value: "Water", desc: "Only by boat or canoe" }
+    { value: "Via road (accessible by vehicle)" },
+    { value: "Via water only (accessible by boat or canoe only)" }
   ];
 
   // ---------- Persistence ----------
