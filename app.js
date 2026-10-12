@@ -4,7 +4,7 @@
  *   dropdown (tick boxes in the list, selected items shown as removable chips). Each level
  *   lists the children of everything ticked above it.
  *   Only the lowest level can be added: "Didn’t find your settlement?" under the Settlement
- *   dropdown opens the Add Settlement form; once saved it comes back ticked.
+ *   dropdown opens the Create New Settlement form; once saved it comes back ticked.
  * Submit → Select Your Settlement. The app always opens on Choose your boundaries.
  */
 (function () {
@@ -189,7 +189,7 @@
         tag: hfs.length === 1 ? hfs[0] : "",
         // Questions follow how a worker thinks about a place: what it is → is it safe → how you get there.
         // GPS is captured on its own, so it sits last as a confirmation.
-        body: `<h1 class="page-title" id="page-title" tabindex="-1">Add Settlement</h1>
+        body: `<h1 class="page-title" id="page-title" tabindex="-1">Create New Settlement</h1>
           <p class="page-desc">Add details about the settlement you are creating.</p>
           <div class="card">
             ${hfs.length > 1 ? selectField("add-hf", "Health Facility", d.hf, hfs) : ""}
