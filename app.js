@@ -14,7 +14,7 @@
   const BOUNDARIES = {
     "Dala": {
       "Kantudu": {
-        "Kantudu PHC": ["Pachi", "Kantudu Gabas", "Unguwar Liman", "Gidan Maiwada"],
+        "Kantudu PHC": ["Pachi", "Kantudu Gabas", "Unguwar Liman", "Gidan Maiwada", "Diu"],
         "Dala Model Clinic": ["Dala Hill", "Kofar Mazugal"]
       },
       "Madigawa": { "Madigawa HP": ["Madigawa Yamma", "Rafin Kwari"] }
@@ -74,6 +74,14 @@
     return null;
   }
 
+  // An existing settlement with this name (case-insensitive), preferring the chosen health facility.
+  function findExisting(name, hf) {
+    const t = tree(), key = name.trim().toLowerCase(), hits = [];
+    for (const lga of Object.keys(t)) for (const ward of Object.keys(t[lga])) for (const h of Object.keys(t[lga][ward]))
+      for (const settlement of t[lga][ward][h]) if (settlement.toLowerCase() === key) hits.push({ lga, ward, hf: h, settlement });
+    return hits.find(x => x.hf === hf) || hits[0] || null;
+  }
+
   // ---------- Session state ----------
   const blankSel = () => ({ lga: [], ward: [], hf: [], settlement: [] });
   const state = {
@@ -82,6 +90,7 @@
     sel: blankSel(),
     open: null,            // level whose multi-select list is open
     draft: null,
+    dup: null,             // existing settlement matching the name being added
     gps: null,
     errors: {}
   };
@@ -101,6 +110,7 @@
     caret: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>',
     go: '<svg class="go-icon" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="14" fill="currentColor"/><path d="M8 14h11m-4.5-5 5 5-5 5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     gps: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="m4.8 8.2 2.2 2.2 4.2-4.6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    warning: '<svg class="dialog-icon" viewBox="0 0 48 44" aria-hidden="true"><path d="M24 1 47 43H1z" fill="#B91900"/><path d="M24 15v14" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/><circle cx="24" cy="36" r="2.6" fill="#fff"/></svg>',
     error: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 4.5v4.2" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.3" r="1" fill="#fff"/></svg>'
   };
 
@@ -197,7 +207,19 @@
               <p class="gps" id="add-gps-note" ${state.gps ? "" : "hidden"}>${ICON.gps}Captured automatically</p>
             </div>
           </div>`,
-        footer: `<button class="btn btn-primary" data-action="save">Save</button>`
+        footer: `<button class="btn btn-primary" data-action="save">Save</button>`,
+        overlay: state.dup ? `<div class="dialog-backdrop">
+            <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dup-title" aria-describedby="dup-desc">
+              <button class="dialog-close" data-action="dup-close" aria-label="Close">${ICON.close}</button>
+              ${ICON.warning}
+              <h2 class="dialog-title" id="dup-title">Settlement Already Exists</h2>
+              <p class="dialog-desc" id="dup-desc">A settlement named <strong>“${esc(state.dup.settlement)}”</strong> already exists. Creating another may result in duplicate records. Do you want to use the existing one?</p>
+              <div class="dialog-actions">
+                <button class="btn btn-primary" id="dup-existing" data-action="dup-existing">Use Existing Settlement</button>
+                <button class="btn btn-secondary" data-action="dup-continue">Create New Anyway</button>
+              </div>
+            </div>
+          </div>` : ""
       };
     },
 
@@ -221,6 +243,7 @@
       ${view.bare ? "" : `<header class="app-bar"><button class="back-btn" data-action="back">${ICON.back}Back</button></header>`}
       <div class="body body-${state.route}" id="screen-body">${view.tag ? `<div class="tag">${ICON.pin}<span>${esc(view.tag)}</span></div>` : ""}${view.body}</div>
       ${view.footer ? `<footer class="footer">${view.footer}</footer>` : ""}
+      ${view.overlay || ""}
       <div class="toast" id="toast" role="status" hidden></div>`;
     document.title = document.getElementById("page-title").textContent;
     document.querySelector(".ms-list")?.scrollIntoView({ block: "nearest" });   // keep an open list clear of the footer
@@ -242,6 +265,7 @@
     clearTimeout(gpsTimer);
     state.route = state.history.pop() || "boundaries";
     state.errors = {};
+    state.dup = null;
     render();
   }
 
@@ -294,6 +318,25 @@
     if (state.errors[id]) showErrors({ ...state.errors, [id]: "" });
   }
 
+  // ---------- Saving ----------
+  function createSettlement() {
+    const d = state.draft, s = state.sel, name = d.name.trim();
+    store.added.push({ ...hfPath(d.hf), hf: d.hf, settlement: name,
+      type: d.type, security: d.security, access: d.access, gps: state.gps });
+    save();
+    // New settlement comes back already ticked.
+    if (!s.settlement.includes(name)) s.settlement.push(name);
+    returnToBoundaries();
+    toast("New settlement added successfully", { success: true });
+  }
+
+  function returnToBoundaries() {
+    state.route = state.history.pop() || "boundaries";
+    state.errors = {};
+    render({ focus: "b-settlement" });
+    document.querySelector('[data-ms="settlement"]')?.scrollIntoView({ block: "center" });
+  }
+
   // ---------- Actions ----------
   const ACTIONS = {
     back,
@@ -326,17 +369,25 @@
       });
       if (!ok) return;
       if (!state.gps) return toast("Waiting for GPS — try again in a moment.");
-      const s = state.sel, name = d.name.trim();
-      store.added.push({ ...hfPath(d.hf), hf: d.hf, settlement: name,
-        type: d.type, security: d.security, access: d.access, gps: state.gps });
-      save();
-      // New settlement comes back already ticked.
-      if (!s.settlement.includes(name)) s.settlement.push(name);
-      state.route = state.history.pop() || "boundaries";
-      state.errors = {};
-      render({ focus: "b-settlement" });
-      document.querySelector('[data-ms="settlement"]')?.scrollIntoView({ block: "center" });
-      toast("New settlement added successfully", { success: true });
+      // Same name already exists: ask before creating a duplicate.
+      state.dup = findExisting(d.name, d.hf);
+      if (state.dup) return render({ focus: "dup-existing" });
+      createSettlement();
+    },
+    "dup-close"() {
+      state.dup = null;
+      render({ focus: "add-name" });
+    },
+    "dup-continue"() {
+      state.dup = null;
+      createSettlement();
+    },
+    // Use the existing settlement instead: tick it (and its boundary path) and go back.
+    "dup-existing"() {
+      const x = state.dup, s = state.sel;
+      state.dup = null;
+      for (const l of LEVELS) if (!s[l.key].includes(x[l.key])) s[l.key].push(x[l.key]);
+      returnToBoundaries();
     },
     submit() {
       state.open = null;
@@ -376,6 +427,16 @@
   });
 
   document.addEventListener("keydown", e => {
+    if (state.dup) {
+      // Keep focus inside the dialog; Escape closes it and returns to the form.
+      if (e.key === "Escape") { state.dup = null; return render({ focus: "add-name" }); }
+      if (e.key === "Tab") {
+        const btns = [...document.querySelectorAll(".dialog button")], i = btns.indexOf(document.activeElement);
+        e.preventDefault();
+        btns[(i + (e.shiftKey ? -1 : 1) + btns.length) % btns.length].focus();
+      }
+      return;
+    }
     if (e.key === "Escape" && state.open) {
       const key = state.open; state.open = null;
       render({ focus: `b-${key}` });
