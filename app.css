@@ -400,3 +400,40 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
 .toast-success { display: flex; align-items: center; gap: 8px; background: var(--success); font-weight: 500; }
 .toast-success svg { width: 20px; height: 20px; flex: 0 0 20px; color: #fff; }
 .toast-success svg path { stroke: var(--success); }
+
+/* Multi-select dropdown (boundaries) – DIGIT MultiSelectDropdown pattern */
+.ms-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; }
+.ms-trigger svg { width: 24px; height: 24px; flex: 0 0 24px; transition: transform .15s; }
+.ms-trigger.open svg { transform: rotate(180deg); }
+.ms-trigger.open, .ms-trigger:focus-visible { outline: none; border: 2px solid var(--primary-1); padding: 0 11px; }
+.ms-trigger:disabled { border-color: var(--border); color: #9E9E9E; cursor: not-allowed; }
+.ms-trigger:disabled svg { color: var(--border); }
+.ms-value { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-value.placeholder { color: var(--text); }
+
+.ms-list {
+  margin-top: 4px; max-height: 216px; overflow-y: auto;
+  background: var(--paper); border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .16);
+}
+.ms-opt { position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; font-size: 16px; line-height: 20px; cursor: pointer; }
+.ms-opt + .ms-opt { border-top: 1px solid #EFEFEF; }
+.ms-opt:has(input:checked) { background: #FFF4EE; }
+.ms-opt input { position: absolute; left: 12px; top: 50%; width: 24px; height: 24px; margin: -12px 0 0; opacity: 0; cursor: pointer; }
+.ms-box { width: 24px; height: 24px; flex: 0 0 24px; border: 2px solid var(--input-border); border-radius: 2px; background: var(--paper); display: grid; place-items: center; color: var(--primary-1); }
+.ms-box svg { width: 20px; height: 20px; visibility: hidden; }
+.ms-opt input:checked + .ms-box { border-color: var(--primary-1); }
+.ms-opt input:checked + .ms-box svg { visibility: visible; }
+.ms-opt input:focus-visible + .ms-box { outline: 2px solid var(--primary-2); outline-offset: 2px; }
+
+.ms-chips { list-style: none; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+.ms-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  height: 32px; padding: 0 4px 0 12px; border-radius: 16px;
+  background: #EFEFEF; border: 1px solid var(--border);
+  font-size: 14px; line-height: 20px; color: var(--text);
+}
+.ms-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-chip button { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--text-2); }
+.ms-chip button svg { width: 16px; height: 16px; }
+.ms-chip button:hover { background: var(--border); }

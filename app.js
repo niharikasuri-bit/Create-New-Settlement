@@ -1,8 +1,10 @@
 /* Settlement APK – choose boundaries, add a settlement that isn't listed (mobile prototype)
  *
- * Choose your boundaries: LGA → Ward → Health Facility → Settlement
+ * Choose your boundaries: LGA → Ward → Health Facility → Settlement, each a multi-select
+ *   dropdown (tick boxes in the list, selected items shown as removable chips). Each level
+ *   lists the children of everything ticked above it.
  *   Only the lowest level can be added: "Didn’t find your settlement?" under the Settlement
- *   dropdown opens the Add Settlement form; once saved it comes back selected.
+ *   dropdown opens the Add Settlement form; once saved it comes back ticked.
  * Submit → Select Your Settlement. The app always opens on Choose your boundaries.
  */
 (function () {
@@ -43,26 +45,42 @@
   try { store = JSON.parse(localStorage.getItem(STORE_KEY)) || { added: [], last: null }; } catch (e) { store = { added: [], last: null }; }
   const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* private mode */ } };
 
-  // Options for a level = master data + anything added under the same path.
-  function optionsFor(level, sel) {
-    const i = LEVELS.findIndex(l => l.key === level);
-    const path = LEVELS.slice(0, i).map(l => sel[l.key]);
-    if (path.some(v => !v)) return [];
-    let node = BOUNDARIES;
-    for (const p of path) node = node && !Array.isArray(node) ? node[p] : undefined;
-    const base = !node ? [] : Array.isArray(node) ? node : Object.keys(node);
-    const added = store.added
-      .filter(a => path.every((p, j) => a[LEVELS[j].key] === p))
-      .map(a => a[level]);
-    return [...new Set([...base, ...added])];
+  // Master data with added settlements merged in at their path.
+  function tree() {
+    const t = JSON.parse(JSON.stringify(BOUNDARIES));
+    for (const a of store.added) {
+      t[a.lga] = t[a.lga] || {};
+      t[a.lga][a.ward] = t[a.lga][a.ward] || {};
+      const list = (t[a.lga][a.ward][a.hf] = t[a.lga][a.ward][a.hf] || []);
+      if (!list.includes(a.settlement)) list.push(a.settlement);
+    }
+    return t;
+  }
+
+  // Options for a level = children of everything ticked at every level above it.
+  function optionsFor(i, sel = state.sel) {
+    let nodes = [tree()];
+    for (let j = 0; j < i; j++) {
+      const picked = sel[LEVELS[j].key];
+      nodes = nodes.flatMap(n => Object.keys(n).filter(k => picked.includes(k)).map(k => n[k]));
+    }
+    return [...new Set(nodes.flatMap(n => (Array.isArray(n) ? n : Object.keys(n))))];
+  }
+
+  // LGA and ward a health facility sits under (for saving a new settlement).
+  function hfPath(hf) {
+    const t = tree();
+    for (const lga of Object.keys(t)) for (const ward of Object.keys(t[lga])) if (t[lga][ward][hf]) return { lga, ward };
+    return null;
   }
 
   // ---------- Session state ----------
-  const blankSel = () => ({ lga: "", ward: "", hf: "", settlement: "" });
+  const blankSel = () => ({ lga: [], ward: [], hf: [], settlement: [] });
   const state = {
     route: "boundaries",   // the app always opens on Choose your boundaries
     history: [],
     sel: blankSel(),
+    open: null,            // level whose multi-select list is open
     draft: null,
     gps: null,
     errors: {}
@@ -78,6 +96,8 @@
     pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>',
     add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>',
     pinOutline: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 2a5 5 0 0 1 5 5c0 3.3-3.4 8-5 10-1.6-2-5-6.7-5-10a5 5 0 0 1 5-5zm0 2.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',
+    tick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>',
     caret: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>',
     go: '<svg class="go-icon" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="14" fill="currentColor"/><path d="M8 14h11m-4.5-5 5 5-5 5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     gps: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="m4.8 8.2 2.2 2.2 4.2-4.6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -86,20 +106,26 @@
 
   const errorText = (id, msg) => `<p class="field-error" id="${id}-err" ${msg ? "" : "hidden"}>${ICON.error}<span>${esc(msg || "")}</span></p>`;
 
-  // ---------- Boundary field ----------
-  // Plain dropdowns. Only the lowest level (Settlement) gets "Didn’t find your settlement?" + a Create New Settlement button under it.
+  // ---------- Boundary field: multi-select dropdown ----------
+  // Trigger shows "Select" or "N selected"; the list opens below with tick boxes; chips list what's ticked.
+  // Only the lowest level (Settlement) gets "Didn’t find your settlement?" + a Create New Settlement button under it.
   function boundaryField(level, i) {
-    const { key, label } = level, s = state.sel, id = `b-${key}`;
-    const parentReady = !i || !!s[LEVELS[i - 1].key];
-    const opts = optionsFor(key, s);
-    return `<div class="field">
-      <label class="field-label" for="${id}">${esc(label)}${reqMark}</label>
-      <div class="select-wrap">
-        <select class="input" id="${id}" data-level="${key}" aria-required="true" ${parentReady ? "" : "disabled"}>
-          <option value="" ${s[key] ? "" : "selected"}>${parentReady ? "Select" : ""}</option>
-          ${opts.map(o => `<option ${o === s[key] ? "selected" : ""}>${esc(o)}</option>`).join("")}
-        </select>${ICON.caret}
-      </div>
+    const { key, label } = level, picked = state.sel[key], id = `b-${key}`;
+    const parentReady = !i || state.sel[LEVELS[i - 1].key].length > 0;
+    const opts = optionsFor(i), open = state.open === key && parentReady;
+    return `<div class="field ms" data-ms="${key}">
+      <p class="field-label" id="${id}-label">${esc(label)}${reqMark}</p>
+      <button class="input ms-trigger ${open ? "open" : ""}" id="${id}" data-action="ms-toggle" data-level="${key}"
+        aria-expanded="${open}" aria-controls="${id}-list" aria-labelledby="${id}-label ${id}-value" ${parentReady ? "" : "disabled"}>
+        <span class="ms-value ${picked.length ? "" : "placeholder"}" id="${id}-value">${picked.length ? `${picked.length} selected` : parentReady ? "Select" : ""}</span>${ICON.caret}
+      </button>
+      ${open ? `<div class="ms-list" id="${id}-list" role="group" aria-labelledby="${id}-label">
+          ${opts.map((o, n) => `<label class="ms-opt"><input type="checkbox" id="${id}-opt-${n}" data-level="${key}" value="${esc(o)}" ${picked.includes(o) ? "checked" : ""}/>
+            <span class="ms-box">${ICON.tick}</span><span>${esc(o)}</span></label>`).join("")}
+        </div>` : ""}
+      ${picked.length ? `<ul class="ms-chips" aria-label="Selected ${esc(label)}">
+          ${picked.map(v => `<li class="ms-chip"><span>${esc(v)}</span><button data-action="ms-remove" data-level="${key}" data-value="${esc(v)}" aria-label="Remove ${esc(v)}">${ICON.close}</button></li>`).join("")}
+        </ul>` : ""}
       ${key === "settlement" && parentReady ? `<p class="find-label">Didn’t find your settlement?</p>
         <button class="btn btn-secondary btn-inline" data-action="add-settlement">${ICON.add}Create New Settlement</button>` : ""}
     </div>`;
@@ -132,7 +158,7 @@
     </div>`;
   }
 
-  const complete = () => LEVELS.every(l => state.sel[l.key]);
+  const complete = () => LEVELS.every(l => state.sel[l.key].length);
 
   // ---------- Screens ----------
   const VIEWS = {
@@ -148,14 +174,15 @@
     },
 
     add() {
-      const d = state.draft, nameErr = state.errors["add-name"];
+      const d = state.draft, nameErr = state.errors["add-name"], hfs = state.sel.hf;
       return {
-        tag: state.sel.hf,
+        tag: hfs.length === 1 ? hfs[0] : "",
         // Questions follow how a worker thinks about a place: what it is → is it safe → how you get there.
         // GPS is captured on its own, so it sits last as a confirmation.
         body: `<h1 class="page-title" id="page-title" tabindex="-1">Add Settlement</h1>
           <p class="page-desc">Add details about the settlement you are creating.</p>
           <div class="card">
+            ${hfs.length > 1 ? selectField("add-hf", "Health Facility", d.hf, hfs) : ""}
             <div class="field">
               <label class="field-label" for="add-name">Name${reqMark}</label>
               <input class="input ${nameErr ? "invalid" : ""}" id="add-name" value="${esc(d.name)}" autocomplete="off" autocapitalize="words" aria-required="true" aria-invalid="${!!nameErr}" aria-describedby="add-name-err" />
@@ -175,12 +202,11 @@
     },
 
     village() {
-      const s = state.sel;
       return {
         body: `<h1 class="page-title" id="page-title" tabindex="-1">Select Your Settlement</h1>
-          <button class="village-card" data-action="continue" aria-label="Continue with ${esc(s.settlement)}">
-            <span class="village-name">${esc(s.settlement)}</span>${ICON.go}
-          </button>
+          ${state.sel.settlement.map(v => `<button class="village-card" data-action="continue" aria-label="Continue with ${esc(v)}">
+            <span class="village-name">${esc(v)}</span>${ICON.go}
+          </button>`).join("")}
           <p class="another-label">Want to choose another settlement?</p>
           <button class="btn btn-secondary btn-inline" data-action="choose-another">${ICON.pinOutline}Choose Another Settlement</button>`
       };
@@ -197,10 +223,11 @@
       ${view.footer ? `<footer class="footer">${view.footer}</footer>` : ""}
       <div class="toast" id="toast" role="status" hidden></div>`;
     document.title = document.getElementById("page-title").textContent;
+    document.querySelector(".ms-list")?.scrollIntoView({ block: "nearest" });   // keep an open list clear of the footer
     const el = focus && document.getElementById(focus);
     if (el) {
       el.focus({ preventScroll: focus === "page-title" });
-      if (el.tagName === "INPUT") el.setSelectionRange(el.value.length, el.value.length);
+      if (el.tagName === "INPUT" && el.type === "text") el.setSelectionRange(el.value.length, el.value.length);
     }
   }
 
@@ -228,10 +255,13 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
   }
 
-  // Clears every level below the given one.
-  function resetBelow(key) {
+  // Drops ticks below a level that no longer sit under anything ticked above.
+  function pruneBelow(key) {
     const i = LEVELS.findIndex(l => l.key === key);
-    LEVELS.slice(i + 1).forEach(l => { state.sel[l.key] = ""; });
+    for (let j = i + 1; j < LEVELS.length; j++) {
+      const opts = optionsFor(j);
+      state.sel[LEVELS[j].key] = state.sel[LEVELS[j].key].filter(v => opts.includes(v));
+    }
   }
 
   // GPS is captured automatically when the form opens (mocked fix after ~1.2 s).
@@ -267,14 +297,28 @@
   // ---------- Actions ----------
   const ACTIONS = {
     back,
+    "ms-toggle"(btn) {
+      const key = btn.dataset.level;
+      state.open = state.open === key ? null : key;
+      render({ focus: `b-${key}` });
+    },
+    "ms-remove"(btn) {
+      const key = btn.dataset.level;
+      state.sel[key] = state.sel[key].filter(v => v !== btn.dataset.value);
+      pruneBelow(key);
+      render({ focus: `b-${key}` });
+    },
     "add-settlement"() {
-      state.draft = { type: "", security: "", name: "", access: "" };
+      state.open = null;
+      const hfs = state.sel.hf;
+      state.draft = { hf: hfs.length === 1 ? hfs[0] : "", type: "", security: "", name: "", access: "" };
       go("add");
       captureGps();
     },
     save() {
       const d = state.draft;
       const ok = showErrors({
+        ...(state.sel.hf.length > 1 ? { "add-hf": d.hf ? "" : "Select the health facility" } : {}),
         "add-name": d.name.trim() ? "" : "Enter the settlement name",
         "add-type": d.type ? "" : "Select the type",
         "add-security": d.security ? "" : "Select how safe it is to visit",
@@ -283,18 +327,20 @@
       if (!ok) return;
       if (!state.gps) return toast("Waiting for GPS — try again in a moment.");
       const s = state.sel, name = d.name.trim();
-      store.added.push({ lga: s.lga, ward: s.ward, hf: s.hf, settlement: name,
+      store.added.push({ ...hfPath(d.hf), hf: d.hf, settlement: name,
         type: d.type, security: d.security, access: d.access, gps: state.gps });
       save();
-      // New settlement comes back already selected.
-      s.settlement = name;
+      // New settlement comes back already ticked.
+      if (!s.settlement.includes(name)) s.settlement.push(name);
       state.route = state.history.pop() || "boundaries";
       state.errors = {};
       render({ focus: "b-settlement" });
+      document.querySelector('[data-ms="settlement"]')?.scrollIntoView({ block: "center" });
       toast("New settlement added successfully", { success: true });
     },
     submit() {
-      store.last = { ...state.sel };
+      state.open = null;
+      store.last = JSON.parse(JSON.stringify(state.sel));
       save();
       state.history = [];
       state.route = "village";
@@ -306,20 +352,39 @@
 
   $phone.addEventListener("click", e => {
     const btn = e.target.closest("[data-action]");
+    // A tap outside the open multi-select closes it (and still does what was tapped).
+    if (state.open && !e.target.closest(`[data-ms="${state.open}"]`)) {
+      state.open = null;
+      if (!btn || btn.dataset.action === "ms-toggle" || btn.dataset.action === "ms-remove") {
+        if (btn && !btn.disabled) return ACTIONS[btn.dataset.action](btn);
+        return render({ focus: null });
+      }
+    }
     if (btn && !btn.disabled) ACTIONS[btn.dataset.action]?.(btn);
   });
 
-  // Dropdown picked: clear the levels below it.
+  // Tick box changed: update that level, drop orphaned ticks below, keep the list open.
   $phone.addEventListener("change", e => {
     const t = e.target, key = t.dataset.level;
-    if (!key || t.tagName !== "SELECT") return;
-    state.sel[key] = t.value;
-    resetBelow(key);
-    render({ focus: `b-${key}` });
+    if (!key || t.type !== "checkbox") return;
+    const list = state.sel[key];
+    state.sel[key] = t.checked ? [...list, t.value] : list.filter(v => v !== t.value);
+    pruneBelow(key);
+    const scroll = document.querySelector(".ms-list")?.scrollTop || 0;
+    render({ focus: t.id });
+    const l = document.querySelector(".ms-list"); if (l) l.scrollTop = scroll;
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && state.open) {
+      const key = state.open; state.open = null;
+      render({ focus: `b-${key}` });
+    }
   });
 
   $phone.addEventListener("input", e => {
     const t = e.target, d = state.draft;
+    if (t.id === "add-hf") { d.hf = t.value; clearError("add-hf"); }
     if (t.id === "add-name") { d.name = t.value; clearError("add-name"); }
     if (t.id === "add-type") { d.type = t.value; clearError("add-type"); }
     if (t.id === "add-security") { d.security = t.value; clearError("add-security"); }
