@@ -36,7 +36,7 @@
   const SECURITY = ["Safe to visit", "Visit with caution", "Not safe to visit"];
   const ACCESS = [
     { value: "Via road (accessible by vehicle)" },
-    { value: "Via water only (accessible by boat or canoe only)" }
+    { value: "Via water (accessible by boat or canoe)" }
   ];
 
   // ---------- Persistence ----------
