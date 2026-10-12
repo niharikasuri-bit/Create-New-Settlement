@@ -213,7 +213,7 @@
               <button class="dialog-close" data-action="dup-close" aria-label="Close">${ICON.close}</button>
               ${ICON.warning}
               <h2 class="dialog-title" id="dup-title">Settlement Already Exists</h2>
-              <p class="dialog-desc" id="dup-desc">A settlement named <strong>“${esc(state.dup.settlement)}”</strong> already exists. Creating another may result in duplicate records. Do you want to use the existing one?</p>
+              <p class="dialog-desc" id="dup-desc">A settlement named <strong>“${esc(state.dup.settlement)}”</strong> already exists. Creating another may result in duplicate records. Do you want to use the existing settlement or create a new one?</p>
               <div class="dialog-actions">
                 <button class="btn btn-primary" id="dup-existing" data-action="dup-existing">Use Existing Settlement</button>
                 <button class="btn btn-secondary" data-action="dup-continue">Create New Anyway</button>
