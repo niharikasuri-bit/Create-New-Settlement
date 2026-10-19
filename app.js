@@ -4,7 +4,8 @@
  *   dropdown (tick boxes in the list, selected items shown as removable chips). Each level
  *   lists the children of everything ticked above it.
  *   Only the lowest level can be added: "Didn’t find your settlement?" under the Settlement
- *   dropdown opens the Create New Settlement form; once saved it comes back ticked.
+ *   dropdown opens the Create New Settlement form (first field: the Health Facility it belongs to);
+ *   once saved it comes back ticked.
  * Submit → Select Your Settlement. The app always opens on Choose your boundaries.
  */
 (function () {
@@ -185,6 +186,8 @@
 
     add() {
       const d = state.draft, nameErr = state.errors["add-name"], hfs = state.sel.hf;
+      // Every health facility under the ticked wards, so the settlement can be linked to any of them.
+      const hfOptions = optionsFor(2);
       return {
         tag: hfs.length === 1 ? hfs[0] : "",
         // Questions follow how a worker thinks about a place: what it is → is it safe → how you get there.
@@ -192,7 +195,7 @@
         body: `<h1 class="page-title" id="page-title" tabindex="-1">Create New Settlement</h1>
           <p class="page-desc">Add details about the settlement you are creating.</p>
           <div class="card">
-            ${hfs.length > 1 ? selectField("add-hf", "Health Facility", d.hf, hfs) : ""}
+            ${selectField("add-hf", "Health Facility", d.hf, hfOptions)}
             <div class="field">
               <label class="field-label" for="add-name">Name${reqMark}</label>
               <input class="input ${nameErr ? "invalid" : ""}" id="add-name" value="${esc(d.name)}" autocomplete="off" autocapitalize="words" aria-required="true" aria-invalid="${!!nameErr}" aria-describedby="add-name-err" />
@@ -324,7 +327,8 @@
     store.added.push({ ...hfPath(d.hf), hf: d.hf, settlement: name,
       type: d.type, security: d.security, access: d.access, gps: state.gps });
     save();
-    // New settlement comes back already ticked.
+    // New settlement comes back already ticked, along with the health facility it was linked to.
+    if (!s.hf.includes(d.hf)) s.hf.push(d.hf);
     if (!s.settlement.includes(name)) s.settlement.push(name);
     returnToBoundaries();
     toast("New settlement added successfully", { success: true });
@@ -361,7 +365,7 @@
     save() {
       const d = state.draft;
       const ok = showErrors({
-        ...(state.sel.hf.length > 1 ? { "add-hf": d.hf ? "" : "Select the health facility" } : {}),
+        "add-hf": d.hf ? "" : "Select the health facility",
         "add-name": d.name.trim() ? "" : "Enter the settlement name",
         "add-type": d.type ? "" : "Select the type",
         "add-security": d.security ? "" : "Select how safe it is to visit",
